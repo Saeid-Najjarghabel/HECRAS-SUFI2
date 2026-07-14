@@ -1,2 +1,2 @@
 # HECRAS-SUFI2
-Uncertainty-Based Auto-Calibration Model for Flood Simulation Model
+HECRAS-SUFI2 is a Python script that automates the calibration and uncertainty analysis of HEC-RAS 2D hydraulic models using the Sequential Uncertainty Fitting (SUFI-2) algorithm. It updates Manning's roughness coefficients, executes HEC-RAS simulations, extracts discharge across user-defined transects, evaluates model performance using RMSE and R², and quantifies prediction uncertainty through 95% Prediction Uncertainty (95PPU), P-factor, and R-factor. The script supports automatic transect generation, Latin Hypercube Sampling (LHS), behavioral parameter selection, and iterative parameter bound refinement, providing an efficient workflow for hydraulic model calibration.
