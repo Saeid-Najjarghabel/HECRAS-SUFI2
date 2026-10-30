@@ -121,7 +121,15 @@ class Callbacks:
     """Override any of these in the interface. Defaults print to the console."""
 
     def log(self, msg: str) -> None:
-        print(msg)
+        import sys
+        stream = sys.stdout
+        if stream is None:  # windowed .exe has no console
+            return
+        try:
+            print(msg)
+        except UnicodeEncodeError:  # e.g. Windows cp1252 console
+            enc = getattr(stream, "encoding", None) or "ascii"
+            print(msg.encode(enc, "replace").decode(enc))
 
     def progress(self, done: int, total: int, text: str) -> None:
         pass
