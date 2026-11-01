@@ -6,6 +6,7 @@ from PyInstaller.utils.hooks import collect_data_files
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 datas = [(os.path.join(ROOT, "sufi2_gui", "resources"), "resources")]
 datas += collect_data_files("pyproj")
+datas += collect_data_files("pyogrio")  # GDAL/PROJ data for GeoPackage export
 
 a = Analysis(
     [os.path.join(ROOT, "main.py")],

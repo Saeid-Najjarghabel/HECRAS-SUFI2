@@ -310,8 +310,9 @@ class SufiEngine:
     # ---- validation --------------------------------------------------------
     def validate(self, need_sufi: bool) -> List[str]:
         c, errs = self.cfg, []
-        if not os.path.isfile(c["RESULTS_HDF"]):
-            errs.append("Results HDF file not found.")
+        if not os.path.isfile(c["RESULTS_HDF"]) and not (need_sufi and c["AUTOMATE_RUNS"]):
+            errs.append("Results HDF file not found. (For a plan that has never been run, "
+                        "start the SUFI-2 calibration with automatic runs: the plan is computed first.)")
         if not os.path.isfile(c["OBS_PATH"]):
             errs.append("Observation file not found.")
         if c["GEOM_HDF"] and not os.path.isfile(c["GEOM_HDF"]):
@@ -377,12 +378,18 @@ class SufiEngine:
             faces_idx = np.array(grp[find(["Faces", "FacePoint", "Indexes"])], dtype=int)
             nname = find(["Faces", "NormalUnitVector", "Length"], required=False)
             normals = np.array(grp[nname]) if nname else None
+            cname = find(["Cells", "Center", "Coordinate"], required=False)
+            fcname = find(["Faces", "Cell", "Indexes"], required=False)
+            cell_xy = np.array(grp[cname]) if cname else None
+            face_cells = np.array(grp[fcname], dtype=int) if fcname else None
 
         segs = [sg.LineString([tuple(face_xy[s]), tuple(face_xy[e])]) for s, e in faces_idx[:, :2]]
         tree = STRtree(segs)
         vecs = np.array([face_xy[e] - face_xy[s] for s, e in faces_idx[:, :2]], float)
         vecs /= (np.linalg.norm(vecs, axis=1)[:, None] + 1e-12)
         self._geom_cache[geom_path] = (face_xy, faces_idx, normals, segs, tree, vecs)
+        self._cells_cache = getattr(self, "_cells_cache", {})
+        self._cells_cache[geom_path] = (cell_xy, face_cells)
         self.log(f"[INFO] Geometry loaded: {len(segs):,} faces.")
         return self._geom_cache[geom_path]
 
@@ -418,26 +425,59 @@ class SufiEngine:
                 return pd.to_datetime(ts)
         return pd.to_datetime(raw)
 
+    def section_faces(self, geom_path: str, p0, p1):
+        """Faces forming the cross-section cut along the transect, with flux signs.
+
+        A face is in the section when its two neighbouring cells lie on opposite sides of
+        the transect and the segment joining the cell centres crosses the transect between
+        its end points. This gives a closed chain of faces separating the two sides, so the
+        summed flux is mass-conserving. (Summing every face the line merely touches, as the
+        original script did, double-counts and cancels faces.)
+        Sign: +1 when positive face flow (cell 0 -> cell 1) crosses from the left side of
+        p0->p1 to the right side.
+        """
+        self.face_geometry(geom_path)
+        cell_xy, face_cells = self._cells_cache[geom_path]
+        if cell_xy is None or face_cells is None:
+            return None, None
+        p0, p1 = np.asarray(p0, float), np.asarray(p1, float)
+        v = p1 - p0
+        L = float(np.linalg.norm(v))
+        if L <= 0:
+            raise ValueError("Transect end points are identical.")
+        u = v / L
+        n = np.array([-u[1], u[0]])
+        nc = len(cell_xy)
+        c0, c1 = face_cells[:, 0], face_cells[:, 1]
+        ok = (c0 >= 0) & (c1 >= 0) & (c0 < nc) & (c1 < nc)
+        A = cell_xy[np.clip(c0, 0, nc - 1)]
+        B = cell_xy[np.clip(c1, 0, nc - 1)]
+        sA, sB = (A - p0) @ n, (B - p0) @ n
+        opp = ok & (np.sign(sA) != np.sign(sB)) & (sA != 0) & (sB != 0)
+        t = sA / np.where(opp, sA - sB, 1.0)
+        along = ((A + (B - A) * t[:, None]) - p0) @ u
+        sel = np.where(opp & (along >= 0) & (along <= L))[0]
+        signs = np.where(sA[sel] > 0, 1.0, -1.0)
+        return sel, signs
+
     def flow_across_line(self, results_path: str, geom_path: str, p0, p1) -> FaceFlowCut:
         import shapely.geometry as sg
         face_xy, faces_idx, normals, segs, tree, _ = self.face_geometry(geom_path)
         data_path, flows = self.face_flows(results_path)
         times = self.time_stamps(results_path, hint=data_path)
 
-        line = sg.LineString([p0, p1])
-        idxs = sorted(i for i in set(np.atleast_1d(tree.query(line)).tolist()) if segs[i].intersects(line))
-        if not idxs:
-            raise RuntimeError("The transect does not intersect any 2D faces — move or lengthen it across the channel.")
-        idxs = np.array(idxs, int)
-        v = np.array([p1[0] - p0[0], p1[1] - p0[1]], float)
-        n_tr = np.array([-v[1], v[0]], float)
-        n_tr /= (np.linalg.norm(n_tr) + 1e-12)
-        if normals is not None:
-            signs = np.sign(normals[idxs, :2] @ n_tr)
+        idxs, signs = self.section_faces(geom_path, p0, p1)
+        if idxs is None:  # older geometry without cell data: fall back to intersected faces
+            warnings.warn("Cell centres not found in geometry; using intersected faces (less accurate).")
+            line = sg.LineString([p0, p1])
+            idxs = np.array(sorted(i for i in set(np.atleast_1d(tree.query(line)).tolist())
+                                   if segs[i].intersects(line)), int)
+            v = np.array([p1[0] - p0[0], p1[1] - p0[1]], float)
+            n_tr = np.array([-v[1], v[0]]) / (np.linalg.norm(v) + 1e-12)
+            signs = np.sign(normals[idxs, :2] @ n_tr) if normals is not None else np.ones(len(idxs))
             signs[signs == 0] = 1.0
-        else:
-            warnings.warn("Face normals not found; flow direction assumed.")
-            signs = np.ones(len(idxs))
+        if len(idxs) == 0:
+            raise RuntimeError("The transect does not cross any 2D faces — move or lengthen it across the channel.")
         q = (flows[:, idxs] * signs).sum(axis=1)
         if len(q) != len(times):
             raise ValueError(f"Flow length ({len(q)}) != time length ({len(times)}). Check HDF5 output options.")
@@ -641,6 +681,14 @@ class SufiEngine:
             json.dump(c, f, indent=2, default=str)
 
         geom = self.geometry_source_path()
+        if not os.path.isfile(c["RESULTS_HDF"]):
+            self.log("[INFO] No results yet for this plan — running HEC-RAS once to create them…")
+            self.cb.progress(0, 1, "Initial HEC-RAS run (creating results)")
+            if c["APPLY_INITIAL_N"] and c["INITIAL_N_BY_NAME"]:
+                self.update_mannings(geom, c["INITIAL_N_BY_NAME"], backup=True)
+            self.run_plan()
+            if not os.path.isfile(c["RESULTS_HDF"]):
+                raise FileNotFoundError(f"HEC-RAS finished but the results file was not created: {c['RESULTS_HDF']}")
         self.log(f"[INFO] Geometry: {geom}")
         self.log(f"[INFO] Results:  {c['RESULTS_HDF']}")
         obs = read_obs_series(c["OBS_PATH"], tz=c["OBS_TZ"], dayfirst=c.get("OBS_DAYFIRST", True))

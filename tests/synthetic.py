@@ -34,13 +34,17 @@ def make(folder):
     x0, y0 = cx - nx * dx / 2, cy - ny * dx / 2
     pts = np.array([(x0 + i * dx, y0 + j * dx) for j in range(ny + 1) for i in range(nx + 1)])
     pid = lambda i, j: j * (nx + 1) + i
-    faces, normals = [], []
-    for j in range(ny):              # vertical faces carry eastward flow
+    cid = lambda i, j: j * nx + i if (0 <= i < nx and 0 <= j < ny) else -1
+    centres = np.array([(x0 + (i + .5) * dx, y0 + (j + .5) * dx) for j in range(ny) for i in range(nx)])
+    faces, normals, fcells = [], [], []
+    for j in range(ny):              # vertical faces carry eastward flow (cell 0 = west, cell 1 = east)
         for i in range(nx + 1):
             faces.append((pid(i, j), pid(i, j + 1))); normals.append((1.0, 0.0, dx))
+            fcells.append((cid(i - 1, j), cid(i, j)))
     for j in range(ny + 1):          # horizontal faces, no flow
         for i in range(nx):
             faces.append((pid(i, j), pid(i + 1, j))); normals.append((0.0, 1.0, dx))
+            fcells.append((cid(i, j - 1), cid(i, j)))
     faces, normals = np.array(faces), np.array(normals)
     n_vert = ny * (nx + 1)
 
@@ -51,6 +55,8 @@ def make(folder):
         a["FacePoints Coordinate"] = pts
         a["Faces FacePoint Indexes"] = faces
         a["Faces NormalUnitVector and Length"] = normals
+        a["Cells Center Coordinate"] = centres
+        a["Faces Cell Indexes"] = np.array(fcells)
         dt = np.dtype([("Land Cover Name", "S64"), ("Base Manning's n Value", "f4")])
         tbl = np.array([(c.encode(), 0.04) for c in ["NoData"] + CLASSES], dtype=dt)
         g.create_dataset("/Geometry/Land Cover (Manning's n)/Calibration Table", data=tbl)

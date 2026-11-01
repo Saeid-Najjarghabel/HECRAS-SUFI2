@@ -15,17 +15,17 @@ University of West London.
 - Settings saved/loaded as JSON; all outputs of the original script plus `best_parameters.json`
 
 ## Install (end users)
-Run `HECRAS-SUFI2-Setup-1.0.0.exe` and follow the wizard. HEC-RAS must be installed for automatic runs.
+Run `HECRAS-SUFI2-Setup-1.1.0.exe` and follow the wizard. HEC-RAS must be installed for automatic runs.
 
 ## Build the installer
 
 **Option A — GitHub (no setup needed).** Push this folder to the repository. The workflow in
 `.github/workflows/build-windows.yml` builds on a Windows runner; download the installer from
-*Actions → latest run → Artifacts*. Pushing a tag like `v1.0.0` also attaches it to a GitHub release.
+*Actions → latest run → Artifacts*. Pushing a tag like `v1.1.0` also attaches it to a GitHub release.
 
 **Option B — your own Windows PC.** Install Python 3.11+ (tick “Add to PATH”) and
 [Inno Setup 6](https://jrsoftware.org/isinfo.php), then double-click `build.bat`.
-Output: `dist\installer\HECRAS-SUFI2-Setup-1.0.0.exe` (the app alone is in `dist\HECRAS-SUFI2\`).
+Output: `dist\installer\HECRAS-SUFI2-Setup-1.1.0.exe` (the app alone is in `dist\HECRAS-SUFI2\`).
 
 ## University logo
 The official UWL logo (from uwl.ac.uk) is in `sufi2_gui/resources/uwl_logo.svg` / `uwl_logo.png`.

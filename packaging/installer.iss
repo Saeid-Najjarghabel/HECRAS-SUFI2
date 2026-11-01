@@ -1,6 +1,6 @@
 ; Inno Setup 6 script — compile with:  iscc packaging\installer.iss
 #define AppName "HEC-RAS SUFI-2 Calibrator"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 #define AppPublisher "University of West London"
 #define AppExe "HECRAS-SUFI2.exe"
 

@@ -18,7 +18,7 @@ if not exist %ISCC% set ISCC="%ProgramFiles%\Inno Setup 6\ISCC.exe"
 if not exist %ISCC% set ISCC="%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
 if exist %ISCC% (
   %ISCC% packaging\installer.iss || goto :error
-  echo Installer built: dist\installer\HECRAS-SUFI2-Setup-1.0.0.exe
+  echo Installer built: dist\installer\HECRAS-SUFI2-Setup-1.1.0.exe
 ) else (
   echo Inno Setup 6 not found - skipping installer. The app folder above runs as-is.
 )
